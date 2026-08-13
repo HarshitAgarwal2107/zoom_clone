@@ -1,0 +1,75 @@
+ZOOM LOGIN INFRASTRUCTURE — FINDINGS
+
+1. One Zoom account can have multiple sign-in methods
+
+Zoom treats Google, Apple, Facebook, Microsoft, and Zoom's own email/password login as different ways of accessing the same account. A user can link additional sign-in methods to an existing account.
+
+Example:
+
+One Zoom account
+    ├── Google
+    ├── Microsoft
+    └── Email + password
+
+
+2. Same email is important for linking
+
+When linking Google, Apple, or Facebook to an existing Zoom account, Zoom instructs the user to use the same email address associated with the existing account.
+
+Zoom also allows a user who originally signed in through Google/Apple/Facebook to add an email/password login using that same email.
+
+
+3. Sign-in method and account are separate concepts
+
+Zoom's Profile page shows the account's available/linked sign-in methods. An account can have more than one.
+
+This supports the model:
+
+Authentication method
+        ↓
+    Zoom account
+
+rather than each provider creating an independent account.
+
+
+4. Google/Apple/Facebook/Microsoft authentication is delegated
+
+When using these providers, Zoom relies on the provider for authentication rather than validating that provider's password itself.
+
+Authentication is managed by the respective third party.
+
+
+5. Zoom also has its own email/password authentication
+
+The standard work-email method is a Zoom-specific email/password login. It can coexist with third-party login methods on the same account.
+
+
+6. Phone-number authentication exists
+
+Zoom also supports phone-number sign-in, including SMS-code sign-in when enabled by the account administrator.
+
+There are restrictions on adding phone login when the account uses Google, Apple, Facebook, Microsoft, or SSO.
+
+
+15. Resulting conceptual system
+
+                  AUTHENTICATION METHODS
+                           |
+       +---------+---------+---------+---------+
+       |         |         |         |         |
+     Email     Google    Apple    Microsoft   SSO
+       |         |         |         |         |
+       +---------+---------+---------+---------+
+                           |
+                           v
+                    ZOOM ACCOUNT
+                           |
+             +-------------+-------------+
+             |             |             |
+          Session       Session       Session
+          Desktop       Browser       Mobile
+             |
+             v
+          Meetings
+
+

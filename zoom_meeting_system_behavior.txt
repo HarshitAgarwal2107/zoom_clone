@@ -1,0 +1,399 @@
+ZOOM-LIKE MEETING SYSTEM — BEHAVIOR LIST
+
+1. Scheduled meeting lifecycle
+
+A meeting generally has three main states:
+
+SCHEDULED
+  ├─ host starts -> ACTIVE
+  └─ never starts -> remains SCHEDULED (or optionally becomes MISSED later)
+
+ACTIVE
+  ├─ host leaves -> ACTIVE
+  └─ host explicitly ends -> ENDED
+
+ENDED
+  └─ meeting is no longer joinable
+
+The scheduled time is metadata. It does not necessarily mean the meeting automatically starts at that exact time.
+
+2. Participant joins before the scheduled time
+
+If Join Before Host is OFF:
+- Participant can attempt to join.
+- They wait for the host.
+- The meeting does not become active merely because a participant arrived.
+
+If Join Before Host is ON:
+- Participant may enter before the host.
+- Zoom can allow this anytime or only 5, 10, or 15 minutes before the scheduled start, depending on configuration.
+- If the host is absent, participants do not have host controls.
+
+Important:
+- Join Before Host and Waiting Room are separate concepts.
+- Waiting Room can affect whether a participant is admitted.
+- Zoom documentation notes that a custom Join Before Host window cannot be used with a PMI.
+
+3. Participant joins exactly at the scheduled time
+
+Possible behavior:
+- If the host has already started the meeting, the participant joins normally.
+- If the host has not started it and Join Before Host is OFF, the participant waits for the host.
+- If Join Before Host is ON and the participant is within the allowed window, they can join before the host.
+
+4. Host joins before the scheduled time
+
+The host can start the meeting before its scheduled time.
+
+The scheduled_at value should remain unchanged as historical/scheduling metadata.
+
+Once the host starts:
+- meeting status -> ACTIVE
+- started_at -> current timestamp
+
+5. Host starts the meeting
+
+Starting a meeting should be an explicit state transition:
+
+SCHEDULED -> ACTIVE
+
+Store:
+- started_at
+- status = ACTIVE
+
+Participants who were waiting can then be admitted/allowed in according to the meeting's access rules.
+
+6. Waiting Room
+
+Waiting Room is different from simply waiting for the host.
+
+Possible flow:
+
+JOIN_REQUEST
+    -> WAITING_ROOM
+    -> ADMITTED
+    -> JOINED
+
+A participant can be allowed into the meeting but still held in a waiting room until the host admits them.
+
+7. Host temporarily leaves
+
+A host disconnecting should NOT automatically mean the meeting has ended.
+
+Recommended behavior:
+- Keep the meeting ACTIVE.
+- Allow the host to reconnect.
+- Do not immediately set ended_at just because the host's connection disappeared.
+
+This is important because a network drop is not the same as the host explicitly ending the meeting.
+
+8. Host explicitly ends the meeting
+
+When the host chooses End Meeting:
+- meeting status -> ENDED
+- ended_at -> current timestamp
+- participants are disconnected
+- new participants cannot join
+
+This is different from the host simply closing their browser or losing their network connection.
+
+9. Participant disconnects
+
+A normal participant leaving should affect only that participant.
+
+Example:
+- Alice leaves.
+- Bob and Charlie remain.
+- Meeting stays ACTIVE.
+
+For participant history:
+- set left_at
+- mark participant as LEFT
+
+10. Everyone leaves
+
+The meeting can remain ACTIVE for a short grace period or be ended according to the application's policy.
+
+For a simple clone, a reasonable rule is:
+- If everyone leaves, keep the meeting active briefly.
+- If nobody reconnects/joins during the grace period, end it.
+
+The important part is to preserve meeting history rather than deleting the meeting.
+
+11. Scheduled meeting never starts
+
+If nobody starts the meeting:
+- It remains SCHEDULED.
+- It does not need to become ACTIVE just because scheduled_at has passed.
+
+Optionally, a later cleanup job could mark it MISSED, but that is not required for a basic implementation.
+
+12. Meeting link is shared before the meeting
+
+A participant may have the meeting link before the meeting starts.
+
+Resolving the meeting ID should NOT automatically mean the user is allowed to enter.
+
+The system should separately check:
+- Does the meeting exist?
+- Is it joinable at this time?
+- Is Join Before Host allowed?
+- Is the user in a waiting room?
+- Is a passcode required?
+- Is the meeting locked?
+- Does the user have permission to join?
+
+13. Wrong meeting ID
+
+If the supplied public meeting ID does not exist:
+- Return an appropriate not-found response.
+- Do not expose database internals.
+
+Use a public meeting identifier separate from the internal database primary key.
+
+14. Passcode
+
+If a meeting requires a passcode:
+- User supplies the passcode.
+- Server verifies it before allowing the participant into the meeting.
+
+For a real implementation, store a passcode hash rather than the plaintext passcode.
+
+15. Locked meeting
+
+If the host locks the meeting:
+- Existing participants remain in the meeting.
+- New participants are rejected.
+
+This is different from ending the meeting.
+
+Possible state:
+- locked = true
+
+Unlocking it allows new participants to attempt to join again.
+
+16. Participant removed
+
+A host/co-host can remove a participant.
+
+Typical behavior:
+- Participant is disconnected.
+- Participant status becomes REMOVED.
+- Depending on the application's rules, the removed participant may or may not be allowed to rejoin.
+
+For a basic clone, it is reasonable to prevent immediate re-entry while the meeting remains locked against that participant.
+
+17. Roles
+
+Basic roles:
+
+HOST
+- Full meeting controls.
+- Can end the meeting.
+- Can manage participants.
+- Can lock the meeting.
+- Can assign roles.
+
+CO-HOST
+- Has many participant-management controls.
+- Does not have every host capability.
+- Should not be treated as the permanent owner of the meeting.
+
+PARTICIPANT
+- Normal meeting member.
+- Can leave the meeting.
+- Has only participant-level controls.
+
+18. Co-host vs alternative host
+
+Co-host:
+- Assigned during the meeting.
+- Helps manage the active meeting.
+- Should not be treated as the person who owns/starts the scheduled meeting.
+
+Alternative host:
+- Can be configured to start a scheduled meeting on behalf of the host.
+- This is different from simply becoming a co-host after the meeting has started.
+
+For a simple clone, these can be implemented later.
+
+19. Host disconnect / unexpected crash
+
+Do not immediately end the meeting when the host's connection disappears.
+
+A better flow is:
+
+HOST CONNECTED
+      |
+      v
+HOST DISCONNECTED
+      |
+      +--> reconnects -> ACTIVE
+      |
+      +--> does not return -> eventually apply host-disconnect policy
+
+The exact timeout is an application decision.
+
+20. Multiple meetings by the same host
+
+Zoom allows hosts to schedule multiple meetings, but there are account/license restrictions around simultaneously active meetings.
+
+For a bare-bones clone, a simple rule is:
+- A host can schedule multiple meetings.
+- Only one meeting can be ACTIVE for that host at a time.
+
+This is easier to implement and avoids complicated concurrency behavior initially.
+
+21. PMI — Personal Meeting ID
+
+PMI is a persistent meeting identity associated with a user.
+
+It is NOT the same thing as a single meeting session.
+
+Conceptually:
+
+USER
+ |
+ +--> PMI
+ |
+ +--> Meeting Session #1
+ |
+ +--> Meeting Session #2
+ |
+ +--> Meeting Session #3
+
+The same PMI can represent different actual meeting sessions over time.
+
+Therefore:
+- PMI should be persistent.
+- Actual meeting/session IDs should be separate.
+- Do not use the PMI as the internal database primary key for a meeting session.
+
+22. Recommended meeting state machine
+
+Meeting:
+
+SCHEDULED
+  |
+  +-- host starts --> ACTIVE
+  |
+  +-- scheduled time passes without start --> SCHEDULED
+                              (optionally MISSED later)
+
+ACTIVE
+  |
+  +-- host temporarily leaves --> ACTIVE
+  |
+  +-- host explicitly ends --> ENDED
+
+Participant:
+
+JOIN_REQUEST
+  |
+  +-- too early / host absent --> WAITING_FOR_HOST
+  |
+  +-- waiting room enabled --> WAITING_ROOM
+  |                              |
+  |                              +--> admitted --> JOINED
+  |
+  +-- access allowed --> JOINED
+
+JOINED
+  |
+  +-- participant leaves --> LEFT
+  |
+  +-- host removes --> REMOVED
+
+23. Suggested initial database structure
+
+users
+
+- id
+- email
+- display_name
+- other authentication/profile fields
+
+meetings
+
+- id
+- host_user_id
+- meeting_id
+- title
+- scheduled_at
+- started_at
+- ended_at
+- passcode_hash
+- allow_join_before_host
+- waiting_room_enabled
+- locked
+- status
+- created_at
+
+meeting_participants
+
+- id
+- meeting_id
+- user_id
+- display_name
+- role
+- joined_at
+- left_at
+- status
+
+Important:
+- `id` can be the internal database primary key.
+- `meeting_id` should be the public meeting identifier.
+- Do not expose the database primary key as the meeting ID.
+
+24. Priority edge cases for the clone
+
+Implement these first:
+
+1. Scheduled meeting with nobody joining.
+2. Participant joins too early.
+3. Join Before Host enabled.
+4. Host starts early.
+5. Participant joins after host starts.
+6. Waiting Room enabled.
+7. Host temporarily disconnects.
+8. Participant disconnects.
+9. Host explicitly ends meeting.
+10. Meeting is locked.
+11. Wrong meeting ID.
+12. Wrong passcode.
+13. Participant is removed.
+14. Co-host behavior.
+15. Alternative host behavior.
+16. Host tries to run multiple active meetings.
+17. PMI vs actual meeting session.
+
+25. Recommended bare-bones implementation model
+
+Keep the distinction between:
+
+MEETING DEFINITION
+- who owns it
+- title
+- scheduled time
+- access configuration
+- public meeting ID
+
+MEETING SESSION
+- when it actually started
+- when it ended
+- current active state
+- current participants
+
+For the first version, these can still live in a single `meetings` table if the application only allows one active session per meeting record.
+
+Do NOT add WebRTC, media servers, recording, advanced scheduling, or other infrastructure just to model these states.
+
+26. Core principle
+
+The most important rule for the clone is:
+
+SCHEDULED does not mean ACTIVE.
+A participant joining does not necessarily start the meeting.
+A host disconnecting does not necessarily end the meeting.
+Only an explicit start should normally transition SCHEDULED -> ACTIVE.
+Only an explicit end (or a defined timeout/policy) should transition ACTIVE -> ENDED.

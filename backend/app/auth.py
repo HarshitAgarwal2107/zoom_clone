@@ -42,7 +42,7 @@ def set_auth_cookie(response: Response, user_id: int) -> None:
         create_access_token(user_id),
         httponly=True,
         samesite="none",
-        secure=False,
+        secure=True,
         max_age=JWT_EXPIRY_DAYS * 24 * 60 * 60,
     )
 
@@ -105,5 +105,10 @@ def methods(user: User = Depends(current_user)):
 
 @router.post("/logout")
 def logout(response: Response):
-    response.delete_cookie(COOKIE_NAME, httponly=True, samesite="none")
+    response.delete_cookie(
+        COOKIE_NAME,
+        httponly=True,
+        samesite="none",
+        secure=True,
+    )
     return {"ok": True}

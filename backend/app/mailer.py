@@ -25,7 +25,8 @@ def send_otp_email(to_email: str, code: str) -> None:
     try:
         with smtplib.SMTP_SSL(settings.SMTP_HOST, settings.SMTP_PORT) as smtp:
             smtp.login(settings.SMTP_USER, settings.SMTP_PASSWORD)
-            smtp.send_message(message)
+            refused = smtp.send_message(message)
+            print(f"[otp] SMTP accepted message, refused={refused}", flush=True)
     except Exception as exc:
         # The code is already stored and printed; a bounced mail must not 500.
         print(f"[otp] send failed for {to_email}: {exc}", flush=True)

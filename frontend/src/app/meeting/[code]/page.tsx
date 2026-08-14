@@ -5,7 +5,33 @@ import { useParams, useRouter } from "next/navigation";
 import "./meeting.css";
 
 const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL;
-const ICE_SERVERS = [{ urls: "stun:stun.l.google.com:19302" }];
+// STUN alone cannot get through carrier-grade NAT — both peers end up with
+// only server-reflexive candidates that neither side can reach, and ICE goes
+// straight to failed. TURN relays the media instead. This is the fallback used
+// when no TURN is configured or the credential fetch fails.
+const ICE_SERVERS: RTCIceServer[] = [{ urls: "stun:stun.l.google.com:19302" }];
+
+// Metered mints short-lived TURN credentials, so nothing long-lived is baked
+// into the bundle. Fetched once per room and shared by every connection.
+async function fetchIceServers(): Promise<RTCIceServer[]> {
+  const url = process.env.NEXT_PUBLIC_METERED_API_URL;
+  if (!url) {
+    console.warn("[ice] NEXT_PUBLIC_METERED_API_URL unset — STUN only, no TURN relay");
+    return ICE_SERVERS;
+  }
+  try {
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const iceServers = await res.json();
+    if (!Array.isArray(iceServers) || iceServers.length === 0) {
+      throw new Error("empty iceServers array");
+    }
+    return iceServers;
+  } catch (error) {
+    console.warn("[ice] TURN credential fetch failed — STUN only, no TURN relay", error);
+    return ICE_SERVERS;
+  }
+}
 
 type Kind = "camera" | "screen";
 
@@ -217,6 +243,9 @@ export default function Room() {
 
   const socketRef = useRef<WebSocket | null>(null);
   const localStreamRef = useRef<MediaStream | null>(null);
+  // Resolved once on room entry, before any connection exists, and shared by
+  // camera and screen connections alike.
+  const iceServersRef = useRef<RTCIceServer[]>(ICE_SERVERS);
   const screenStreamRef = useRef<MediaStream | null>(null);
   const cameraPcsRef = useRef<Map<string, RTCPeerConnection>>(new Map());
   const screenPcsRef = useRef<Map<string, RTCPeerConnection>>(new Map());
@@ -242,7 +271,7 @@ export default function Room() {
     const existing = cameraPcsRef.current.get(peerId);
     if (existing) return existing;
 
-    const pc = new RTCPeerConnection({ iceServers: ICE_SERVERS });
+    const pc = new RTCPeerConnection({ iceServers: iceServersRef.current });
     const stream = localStreamRef.current;
     if (stream) {
       stream.getTracks().forEach((track) => pc.addTrack(track, stream));
@@ -268,7 +297,7 @@ export default function Room() {
   }
 
   function createScreenPc(peerId: string, outgoing: boolean) {
-    const pc = new RTCPeerConnection({ iceServers: ICE_SERVERS });
+    const pc = new RTCPeerConnection({ iceServers: iceServersRef.current });
     pc.onicecandidate = (event) => {
       if (event.candidate) {
         send({
@@ -372,6 +401,15 @@ export default function Room() {
       }
       localStreamRef.current = stream;
       setLocalStream(stream);
+
+      // Before the socket opens, because every peer connection is created in
+      // response to a socket message — so this is the last moment at which no
+      // connection can exist yet.
+      iceServersRef.current = await fetchIceServers();
+      if (!startedRef.current) {
+        stream?.getTracks().forEach((t) => t.stop());
+        return;
+      }
 
       const wsBase = BACKEND_URL!.replace(/^http/, "ws");
       const socket = new WebSocket(

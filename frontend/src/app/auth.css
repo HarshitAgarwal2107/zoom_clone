@@ -671,3 +671,34 @@
     height: 38px;
   }
 }
+
+/* ===== RESPONSIVE (phone) =====
+   The 900px block above stacks the panels; below 768 the illustration is
+   dropped entirely so the form owns the viewport. Desktop is untouched. */
+@media (max-width: 768px) {
+  .auth-left { display: none; }
+
+  .auth-content { flex-direction: column; }
+
+  .auth-right {
+    width: 100%;
+    flex: 1;
+  }
+
+  .auth-form-container {
+    width: 100%;
+    max-width: 100%;
+  }
+}
+
+@media (max-width: 480px) {
+  /* Full-width controls and 44px touch targets. */
+  .auth-field input,
+  .auth-submit-btn,
+  .auth-social-btn {
+    width: 100%;
+    min-height: 44px;
+  }
+
+  .auth-social-buttons { width: 100%; }
+}

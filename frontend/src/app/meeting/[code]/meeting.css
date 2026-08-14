@@ -1405,3 +1405,97 @@
     aspect-ratio: 16/9;
   }
 }
+
+/* ===== RESPONSIVE =====
+   Everything below sits inside a breakpoint, so desktop (1024px+) is
+   unchanged. Declared last so these win over the base rules. */
+
+/* Mobile browsers count their own chrome in 100vh, which pushes a fixed
+   bottom toolbar off screen. dvh measures the visible viewport; browsers
+   without it keep the 100vh above. */
+@supports (height: 100dvh) {
+  .meeting-layout { height: 100dvh; }
+  .meeting-prejoin,
+  .meeting-error { min-height: 100dvh; }
+}
+
+@media (max-width: 1023.98px) {
+  /* The fixed 250px side groups are what pushes the toolbar past the right
+     edge. Letting them size to content, and scrolling the centre group,
+     means nothing is ever clipped: Mute and Stop Video sit at the start of
+     the centre group and End stays in the right group, so all three are
+     reachable without scrolling. */
+  .toolbar-left,
+  .toolbar-right {
+    width: auto;
+    flex-shrink: 0;
+  }
+
+  .toolbar-center {
+    justify-content: flex-start;
+    overflow-x: auto;
+    overflow-y: hidden;
+    scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .toolbar-center::-webkit-scrollbar { display: none; }
+
+  /* Truncate rather than wrap, so the top bar keeps its height. */
+  .meeting-topbar-left { min-width: 0; }
+
+  .meeting-topbar-title {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    min-width: 0;
+  }
+}
+
+/* Chat and participants stop being a side panel and cover the room. The
+   panel header's existing close button is the close control. */
+@media (max-width: 767.98px) {
+  .meeting-main-content { position: relative; }
+
+  .meeting-sidebar-container {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    z-index: 60;
+    border-left: none;
+    animation: none;
+  }
+}
+
+@media (max-width: 768px) {
+  /* Touch targets. The existing rule here sets padding and min-width; height
+     is what was missing. */
+  .toolbar-btn,
+  .panel-icon-btn,
+  .participants-bottom-btn {
+    min-height: 44px;
+  }
+
+  .panel-icon-btn { min-width: 44px; }
+}
+
+@media (max-width: 640px) {
+  .meeting-toolbar {
+    height: 60px;
+    padding: 0 6px;
+  }
+
+  .toolbar-btn {
+    padding: 4px 6px;
+    min-width: 44px;
+  }
+
+  .toolbar-btn-label { font-size: 8px; }
+
+  .video-grid {
+    padding: 8px;
+    gap: 6px;
+  }
+
+  .meeting-topbar { padding: 0 10px; }
+}

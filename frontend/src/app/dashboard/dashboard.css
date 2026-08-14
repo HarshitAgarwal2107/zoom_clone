@@ -1042,3 +1042,46 @@
     margin: 16px;
   }
 }
+
+/* ===== RESPONSIVE (phone) =====
+   Inside a breakpoint, so tablet and desktop are unchanged. The existing
+   768px block already handles card stacking and the clock; this covers the
+   narrow phone widths it does not. */
+@media (max-width: 640px) {
+  /* Tiles stack instead of sitting in a row. */
+  .action-buttons {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 12px;
+    padding: 8px 0 24px;
+  }
+
+  .action-btn {
+    flex-direction: row;
+    justify-content: flex-start;
+    gap: 14px;
+    padding: 10px 14px;
+    min-height: 44px;
+    border-radius: 12px;
+  }
+
+  .meeting-item-actions .meeting-action-btn { min-height: 44px; }
+
+  .clock-time { font-size: 30px; }
+  .clock-date { font-size: 13px; }
+}
+
+/* The 768px block above turns .meeting-item into a column, and in a column
+   flex the base min-width:0 no longer bounds the child — so a long title with
+   white-space:nowrap stretches the row and scrolls the page sideways. Giving
+   the info block the parent's width lets the existing ellipsis do its job. */
+@media (max-width: 768px) {
+  .meeting-item-info { width: 100%; }
+  .meeting-item-meta { flex-wrap: wrap; }
+}
+
+@media (max-width: 430px) {
+  .dashboard-main { padding: 12px 12px 32px; }
+  .clock-time { font-size: 26px; }
+  .dashboard-header { padding: 0 12px; }
+}

@@ -33,18 +33,21 @@ Console. The authorized redirect URI must be exactly:
 http://localhost:8000/api/auth/google/callback
 ```
 
-### Gmail SMTP (optional — see the no-credentials fallback below)
+### Email delivery (optional — see the no-credentials fallback below)
 
-Gmail rejects account passwords for SMTP, so this needs an App Password:
+OTP codes are sent through **Resend's HTTP API**, not SMTP. This is not a
+preference: Render blocks outbound SMTP ports, so an SMTP client cannot deliver
+from the deployed environment no matter how it is configured.
 
-1. Google Account → Security → **2-Step Verification must be on** (App
-   Passwords don't exist without it).
-2. Security → App passwords → generate one for "Mail".
-3. Use the 16-character value as `SMTP_PASSWORD`, spaces removed.
+1. Create an account at [resend.com](https://resend.com) and generate an API key.
+2. Set `RESEND_API_KEY` in `backend/.env`.
 
-Host `smtp.gmail.com`, port 465, `SMTP_USER` is the full Gmail address.
+The sender is `onboarding@resend.dev`, Resend's shared address, so no domain
+verification is needed. Note that on Resend's free tier this shared sender can
+only deliver to the address that owns the account — sending to arbitrary
+recipients requires verifying your own domain and changing `MAIL_FROM_ADDRESS`.
 
-**If `SMTP_USER` is empty the send is skipped entirely and the code is only
+**If `RESEND_API_KEY` is empty the send is skipped entirely and the code is only
 printed to the server console.** This is deliberate: the whole OTP flow is
 runnable on a fresh clone with no credentials. The code is printed either way,
 so you never have to wait on mail delivery to test.

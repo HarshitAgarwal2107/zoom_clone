@@ -29,3 +29,4 @@ def send_otp_email(to_email: str, code: str) -> None:
     except Exception as exc:
         # The code is already stored and printed; a bounced mail must not 500.
         print(f"[otp] send failed for {to_email}: {exc}", flush=True)
+        raise

@@ -48,7 +48,12 @@ class User(Base):
     __tablename__ = "users"
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    email: Mapped[str] = mapped_column(String, unique=True, index=True, nullable=False)
+    # Nullable: a guest who created a meeting without signing in is a real user
+    # row with no address behind it. Several rows may be NULL; only real
+    # addresses are unique, which is what account linking keys on.
+    email: Mapped[str | None] = mapped_column(
+        String, unique=True, index=True, nullable=True
+    )
     email_verified: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=False
     )

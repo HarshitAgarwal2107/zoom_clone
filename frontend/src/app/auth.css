@@ -553,6 +553,41 @@
   list-style: disc;
 }
 
+/* Live per-rule validation: the bullet is replaced by a tick or cross. */
+.password-hints-list.checked {
+  list-style: none;
+  padding-left: 0;
+}
+
+.password-hints-list.checked li {
+  list-style: none;
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+}
+
+.password-hints-list.checked li.pass {
+  color: #2D8C3C;
+}
+
+.password-hints-list.checked li.fail {
+  color: #e02b2b;
+}
+
+.password-hint-mark {
+  flex: 0 0 auto;
+  font-weight: 700;
+  line-height: 1.6;
+}
+
+.password-hint-mark.pass {
+  color: #2D8C3C;
+}
+
+.password-hint-mark.fail {
+  color: #e02b2b;
+}
+
 /* Error message banner */
 .auth-error {
   background: #FDECEA;

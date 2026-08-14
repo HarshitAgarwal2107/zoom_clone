@@ -35,6 +35,29 @@
   gap: 12px;
 }
 
+/* Signed-out header control, sized to sit where the avatar does. */
+.signin-link {
+  display: inline-flex;
+  align-items: center;
+  height: 32px;
+  padding: 0 14px;
+  border-radius: 16px;
+  background: var(--zoom-blue, #0B5CFF);
+  color: #fff;
+  font-size: 14px;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.signin-link:hover {
+  opacity: 0.9;
+}
+
+.empty-state-text a {
+  color: var(--zoom-blue, #0B5CFF);
+  font-weight: 600;
+}
+
 .upgrade-btn {
   background: var(--zoom-blue);
   color: white;

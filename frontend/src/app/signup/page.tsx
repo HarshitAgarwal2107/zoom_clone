@@ -222,7 +222,7 @@ export default function SignUp() {
         <div className="auth-header-logo">ZOOM</div>
         <div className="auth-header-right">
           <span>Already have an account?</span>
-          <a href="/">Sign In</a>
+          <a href="/signin">Sign In</a>
           <span className="auth-header-separator">|</span>
           <span>Support</span>
         </div>
@@ -302,7 +302,7 @@ export default function SignUp() {
                 </div>
 
                 <div className="auth-link-row">
-                  Already have an account? <a href="/">Sign in</a>
+                  Already have an account? <a href="/signin">Sign in</a>
                 </div>
 
                 {error && <div className="auth-error">{error}</div>}
@@ -403,7 +403,7 @@ export default function SignUp() {
                   <span className="auth-field-label">Last name</span>
                 </div>
 
-                <PasswordHints show={hintsOpen} />
+                <PasswordHints show={hintsOpen} value={password} />
 
                 <div className="auth-field auth-field-password">
                   <input

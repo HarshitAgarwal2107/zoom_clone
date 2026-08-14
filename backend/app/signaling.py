@@ -1,3 +1,4 @@
+import asyncio
 import secrets
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
@@ -26,6 +27,9 @@ from .models import (
 
 RELAY_TYPES = ("offer", "answer", "ice-candidate", "state")
 MAX_CHAT_BODY = 2000
+# Section 10: an empty room stays active briefly rather than ending at once,
+# so a host alone who reloads or steps out comes back to the same meeting.
+GRACE_SECONDS = 30
 
 # Close codes the frontend distinguishes.
 CLOSE_NOT_FOUND = 4404
@@ -56,10 +60,44 @@ waiting: dict[str, dict[str, Peer]] = {}
 # Held because the host must admit them. A separate concept from the above:
 # the meeting can be running and a participant still be waiting for approval.
 knocking: dict[str, dict[str, Peer]] = {}
+# Pending "end this empty meeting" timers, one per meeting at most. In-process
+# and therefore lost on restart — see the README.
+end_timers: dict[str, asyncio.Task] = {}
 
 
 def _now() -> datetime:
     return datetime.now(UTC).replace(tzinfo=None)
+
+
+def _cancel_end_timer(meeting_code: str) -> None:
+    task = end_timers.pop(meeting_code, None)
+    if task is not None:
+        task.cancel()
+
+
+async def _end_after_grace(meeting_code: str) -> None:
+    try:
+        await asyncio.sleep(GRACE_SECONDS)
+        if rooms.get(meeting_code):
+            return  # somebody came back
+        # The connection's session is long closed by now, so use a fresh one.
+        db = SessionLocal()
+        try:
+            meeting = db.scalar(
+                select(Meeting).where(Meeting.meeting_code == meeting_code)
+            )
+            if meeting is not None and meeting.status == MEETING_STATUS_ACTIVE:
+                meeting.status = MEETING_STATUS_ENDED
+                meeting.ended_at = _now()
+                db.commit()
+        finally:
+            db.close()
+    except asyncio.CancelledError:
+        pass
+    finally:
+        # Only clear our own handle: a newer timer may already have replaced it.
+        if end_timers.get(meeting_code) is asyncio.current_task():
+            end_timers.pop(meeting_code, None)
 
 
 def _user_id_from_cookie(websocket: WebSocket) -> int | None:
@@ -95,6 +133,9 @@ async def _send_to_hosts(meeting_code: str, message: dict):
 
 
 async def _admit(db: Session, meeting: Meeting, peer_id: str, peer: Peer) -> None:
+    # Anyone arriving calls off a pending end.
+    _cancel_end_timer(meeting.meeting_code)
+
     participant = MeetingParticipant(
         meeting_id=meeting.id,
         user_id=peer.user_id,
@@ -173,6 +214,7 @@ async def start_meeting(db: Session, meeting: Meeting) -> None:
 async def end_meeting(db: Session, meeting: Meeting) -> None:
     """Section 8: an explicit end. Terminal, and everyone is disconnected."""
     code = meeting.meeting_code
+    _cancel_end_timer(code)
     if meeting.status != MEETING_STATUS_ENDED:
         meeting.status = MEETING_STATUS_ENDED
         meeting.ended_at = _now()
@@ -426,11 +468,18 @@ async def signaling(
                 row.status = PARTICIPANT_STATUS_LEFT
 
             db.refresh(meeting)
+            # Nothing here looks at who left. A host disconnecting while others
+            # remain leaves the meeting ACTIVE (Sections 7 and 19); only an
+            # explicit End Meeting ends a meeting with people still in it.
             if not room:
                 rooms.pop(meeting_code, None)
                 if meeting.status == MEETING_STATUS_ACTIVE:
-                    meeting.status = MEETING_STATUS_ENDED
-                    meeting.ended_at = _now()
+                    # Not ended here — the grace timer decides, and a rejoin
+                    # within the window cancels it.
+                    _cancel_end_timer(meeting_code)
+                    end_timers[meeting_code] = asyncio.create_task(
+                        _end_after_grace(meeting_code)
+                    )
             db.commit()
             await _broadcast(meeting_code, {"type": "peer-left", "peer_id": peer_id})
 

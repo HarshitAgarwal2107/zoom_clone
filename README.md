@@ -301,8 +301,55 @@ running meeting's code and title so the dashboard can offer "End previous
 meeting" rather than a dead end. Scheduling any number of meetings is fine;
 only running two at once is not.
 
-**An explicit End Meeting (Section 8)** now exists, closing one of the two
-divergences noted below: ending was previously only ever implicit.
+**An explicit End Meeting (Section 8)** now exists: ending was previously only
+ever implicit.
+
+**An empty room is not ended immediately (Section 10).** When the last peer
+leaves, a 30-second timer is scheduled instead; if anyone joins during that
+window the timer is cancelled and they land in the same live meeting. Without
+this, a host alone who reloads the page ends their own meeting.
+
+**Nothing in the disconnect path looks at *who* left.** A host disconnecting
+while others remain leaves the meeting ACTIVE (Sections 7 and 19) — only an
+explicit End Meeting ends a meeting that still has people in it.
+
+**The grace timer is in-process** (`asyncio.Task` in a module-level dict) and
+therefore does not survive a restart. A backend restarted during a grace window
+leaves that meeting `active` with nobody in it, and nothing will later end it —
+an orphaned row until the host ends it explicitly. Durable timers would mean a
+scheduler or a swept `expires_at` column, which is more machinery than this
+demo needs; it is the same single-process assumption as the room registry.
+
+**`/` is the dashboard, not a sign-in wall.** It renders signed out, with a
+guest banner and working New meeting / Join buttons; sign-in moved to
+`/signin`, and `/dashboard` redirects to `/`. The only session-guarded page is
+`/profile`.
+
+**A guest who starts a meeting becomes an anonymous user.** `POST /api/meetings`
+without a session creates a `users` row with a NULL email and issues the normal
+JWT cookie, so from that moment they are an ordinary authenticated user. This
+was chosen over a parallel signed guest token precisely because it keeps **one**
+notion of who a host is: `meetings.host_id` stays NOT NULL and every host check
+— start, end, lock, remove, admit, waiting room, one-active-meeting — is
+untouched. The costs are `users` rows with no identity behind them (a sweep job
+would clear old ones) and a nullable `email` column.
+
+Joining is unaffected: a joiner still creates no user row, only a
+`meeting_participants` row with `user_id` NULL.
+
+**Signing in later does not adopt a guest's meetings.** `resolve_user` matches
+on identity or verified email and cannot see the anonymous session, so a guest
+who signs in afterwards gets a *separate* account. The guest banner is worded to
+avoid implying otherwise. Adopting an anonymous account on sign-in would mean
+reassigning its meetings and deleting the placeholder row at each of the three
+`set_auth_cookie` call sites — a deliberate gap, not an oversight.
+
+**Guests never meet an auth guard.** `/meeting/[code]`, `/join/[code]` and
+`GET /api/meetings/{code}` are all unauthenticated, and the WebSocket accepts a
+cookieless connection. Session guards exist only on `/dashboard` and
+`/profile`. Role is `"host"` only when an authenticated user matches
+`meeting.host_id`; a signed-in non-host is an ordinary participant, and a guest
+is a participant row with `user_id` NULL.
 
 **Chat rides the meeting WebSocket, not an `RTCDataChannel`.** The socket
 already exists and already knows room membership, so chat costs one message type
@@ -437,21 +484,8 @@ same semantics.
 
 ## Known divergences from the behaviour document
 
-One remains:
-
-**Ending on an empty room contradicts Sections 7, 10, 19 and 26.** The document
-says a host disconnecting must not end the meeting, and that everyone leaving
-should trigger a grace period rather than an immediate end. This build still
-ends a meeting the moment the last peer disconnects, so a solo host who
-refreshes their browser ends their own meeting. The fix is a host-disconnect
-grace period, deliberately deferred.
-
-That interacts with the one-active-meeting rule: with the grace period in place,
-closing a tab would leave the meeting running, which is exactly the state the
-"You already have a meeting running" screen is designed for. Today that screen
-appears mainly when *other* participants are still connected.
-
-The other divergence — no explicit End Meeting (Section 8) — is now closed.
+Both are now closed: an explicit End Meeting exists (Section 8), and an empty
+room gets a grace period rather than ending at once (Sections 7, 10, 19).
 
 ## Scaling
 

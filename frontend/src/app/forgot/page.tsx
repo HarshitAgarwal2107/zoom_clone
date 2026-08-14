@@ -142,7 +142,7 @@ export default function ForgotPassword() {
         <div className="auth-header-logo">ZOOM</div>
         <div className="auth-header-right">
           <span>Remember your password?</span>
-          <a href="/">Sign In</a>
+          <a href="/signin">Sign In</a>
           <span className="auth-header-separator">|</span>
           <span>Support</span>
         </div>
@@ -196,7 +196,7 @@ export default function ForgotPassword() {
                 </button>
 
                 <div className="auth-link-row">
-                  <a href="/">Back to sign in</a>
+                  <a href="/signin">Back to sign in</a>
                 </div>
 
                 {error && <div className="auth-error">{error}</div>}
@@ -277,7 +277,7 @@ export default function ForgotPassword() {
                 <h1 className="auth-form-title">Set a new password</h1>
                 <div className="auth-form-subtitle">Choose a strong password for your account.</div>
 
-                <PasswordHints show={hintsOpen} />
+                <PasswordHints show={hintsOpen} value={password} />
 
                 <div className="auth-field auth-field-password">
                   <input

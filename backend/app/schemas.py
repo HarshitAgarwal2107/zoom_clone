@@ -9,7 +9,7 @@ class UserOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: int
-    email: str
+    email: str | None
     email_verified: bool
     display_name: str
     avatar_url: str | None

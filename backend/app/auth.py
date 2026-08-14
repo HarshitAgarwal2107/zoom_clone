@@ -65,6 +65,20 @@ def current_user(
     return user
 
 
+def current_user_optional(
+    access_token: str | None = Cookie(default=None, alias=COOKIE_NAME),
+    db: Session = Depends(get_db),
+) -> User | None:
+    """Same as current_user, but a missing or stale cookie is not an error."""
+    if not access_token:
+        return None
+    try:
+        payload = jwt.decode(access_token, settings.SECRET_KEY, algorithms=[JWT_ALGORITHM])
+        return db.get(User, int(payload["sub"]))
+    except (JWTError, KeyError, ValueError):
+        return None
+
+
 @router.get("/google/login")
 async def google_login(request: Request):
     redirect_uri = f"{settings.BACKEND_URL}/api/auth/google/callback"

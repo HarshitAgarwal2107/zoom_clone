@@ -3,11 +3,11 @@ from datetime import UTC, datetime
 
 import bcrypt
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Response
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from .auth import current_user
+from .auth import current_user, current_user_optional, set_auth_cookie
 from .database import get_db
 from .models import (
     MEETING_STATUS_ACTIVE,
@@ -71,9 +71,20 @@ def to_naive_utc(value: datetime) -> datetime:
 @router.post("", response_model=MeetingOut, status_code=201)
 def create_meeting(
     payload: MeetingCreate,
+    response: Response,
     db: Session = Depends(get_db),
-    user: User = Depends(current_user),
+    user: User | None = Depends(current_user_optional),
 ):
+    # A guest starting a meeting becomes a real (if anonymous) user and gets a
+    # normal session. Every host check downstream — start, end, lock, remove,
+    # admit, one-active-meeting — then works unchanged, because there is only
+    # ever one notion of who a host is.
+    if user is None:
+        user = User(email=None, email_verified=False, display_name="Guest")
+        db.add(user)
+        db.commit()
+        db.refresh(user)
+        set_auth_cookie(response, user.id)
     if payload.meeting_type not in MEETING_TYPES:
         raise HTTPException(status_code=422, detail="Invalid meeting_type")
 

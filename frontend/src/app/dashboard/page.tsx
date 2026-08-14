@@ -44,6 +44,7 @@ function getInitials(name: string) {
 export default function Dashboard() {
   const router = useRouter();
   const [user, setUser] = useState<User | null>(null);
+  const [loaded, setLoaded] = useState(false);
   const [meetings, setMeetings] = useState<Meeting[]>([]);
 
   const [showForm, setShowForm] = useState(false);
@@ -80,19 +81,18 @@ export default function Dashboard() {
 
   const loadMeetings = useCallback(async () => {
     const res = await fetch(`${BACKEND_URL}/api/meetings`, { credentials: "include" });
-    setMeetings(await res.json());
+    // Signed out there is no list to fetch; that is not an error.
+    setMeetings(res.ok ? await res.json() : []);
   }, []);
 
+  // No auth guard: this is the landing page and renders signed out.
   useEffect(() => {
     fetch(`${BACKEND_URL}/api/auth/me`, { credentials: "include" }).then(async (res) => {
-      if (!res.ok) {
-        router.replace("/");
-        return;
-      }
-      setUser(await res.json());
+      setUser(res.ok ? await res.json() : null);
+      setLoaded(true);
       await loadMeetings();
     });
-  }, [router, loadMeetings]);
+  }, [loadMeetings]);
 
   async function newMeeting() {
     const res = await fetch(`${BACKEND_URL}/api/meetings`, {
@@ -207,6 +207,11 @@ export default function Dashboard() {
     router.replace("/");
   }
 
+  // Join works signed out; starting or scheduling a meeting needs an account.
+  function requireSignIn(action: () => void) {
+    return () => (user ? action() : router.push("/signin"));
+  }
+
   function copyInvite(code: string) {
     navigator.clipboard.writeText(`${window.location.origin}/join/${code}`);
   }
@@ -224,7 +229,7 @@ export default function Dashboard() {
     day: "numeric",
   });
 
-  if (!user) {
+  if (!loaded) {
     return (
       <div className="loading-screen">
         <div className="loading-spinner" />
@@ -243,35 +248,37 @@ export default function Dashboard() {
         <div className="header-logo">zoom</div>
         <div className="header-right">
           <button className="upgrade-btn">Upgrade</button>
-          <div className="avatar-container" ref={profileRef}>
-            <button
-              className="avatar-btn"
-              onClick={() => setShowProfileMenu(!showProfileMenu)}
-              title={user.display_name}
-            >
-              {user.avatar_url ? (
-                <img src={user.avatar_url} alt={user.display_name} />
-              ) : (
-                getInitials(user.display_name)
+          {user ? (
+            <div className="avatar-container" ref={profileRef}>
+              <button
+                className="avatar-btn"
+                onClick={() => setShowProfileMenu(!showProfileMenu)}
+                title={user.display_name}
+              >
+                {user.avatar_url ? (
+                  <img src={user.avatar_url} alt={user.display_name} />
+                ) : (
+                  getInitials(user.display_name)
+                )}
+              </button>
+              {showProfileMenu && (
+                <>
+                  <div className="dropdown-backdrop" onClick={() => setShowProfileMenu(false)} />
+                  <div className="profile-dropdown">
+                    <div className="profile-dropdown-header">
+                      <div className="profile-dropdown-name">{user.display_name}</div>
+                      <div className="profile-dropdown-email">{user.email}</div>
+                    </div>
+                    <div className="profile-dropdown-menu">
+                      <button className="profile-dropdown-item" onClick={logout}>Sign Out</button>
+                    </div>
+                  </div>
+                </>
               )}
-            </button>
-            {showProfileMenu && (
-              <>
-                <div className="dropdown-backdrop" onClick={() => setShowProfileMenu(false)} />
-                <div className="profile-dropdown">
-                  <div className="profile-dropdown-header">
-                    <div className="profile-dropdown-name">{user.display_name}</div>
-                    <div className="profile-dropdown-email">{user.email}</div>
-                  </div>
-                  <div className="profile-dropdown-menu">
-                    <a href="/profile" className="profile-dropdown-link">My Profile</a>
-                    <div className="profile-dropdown-divider" />
-                    <button className="profile-dropdown-item" onClick={logout}>Sign Out</button>
-                  </div>
-                </div>
-              </>
-            )}
-          </div>
+            </div>
+          ) : (
+            <a href="/signin" className="signin-link">Sign In</a>
+          )}
         </div>
       </header>
 
@@ -285,7 +292,7 @@ export default function Dashboard() {
 
         {/* Action Buttons */}
         <section className="action-buttons">
-          <button className="action-btn" onClick={newMeeting}>
+          <button className="action-btn" onClick={requireSignIn(newMeeting)}>
             <div className="action-btn-icon orange">
               <svg viewBox="0 0 24 24" fill="none">
                 <path d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14v-4z" fill="white"/>
@@ -307,7 +314,7 @@ export default function Dashboard() {
             <span className="action-btn-label">Join</span>
           </button>
 
-          <button className="action-btn" onClick={() => setShowForm(!showForm)}>
+          <button className="action-btn" onClick={requireSignIn(() => setShowForm(!showForm))}>
             <div className="action-btn-icon blue">
               <svg viewBox="0 0 24 24" fill="white">
                 <rect x="3" y="4" width="18" height="18" rx="2" fill="none" stroke="white" strokeWidth="2"/>
@@ -472,7 +479,15 @@ export default function Dashboard() {
                   <path d="M30 85 Q60 70 90 85" stroke="currentColor" strokeWidth="1" fill="none" opacity="0.3"/>
                 </svg>
               </div>
-              <div className="empty-state-text">No meetings for today</div>
+              <div className="empty-state-text">
+                {user ? (
+                  "No meetings for today"
+                ) : (
+                  <>
+                    <a href="/signin">Sign in</a> to see your meetings
+                  </>
+                )}
+              </div>
             </div>
           )}
         </div>
